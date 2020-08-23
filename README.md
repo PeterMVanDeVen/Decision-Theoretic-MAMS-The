@@ -10,3 +10,4 @@ II) Comparison of two experimental arms to a control arm
 
 All functions to evaluate the operating characteristics of Bayesian-Adaptive Decision-Theoretic MAMS clinical trials in which two experimental arms are compared to a control aarm are contained in the R script named 'Functions for comparing two experimental arms to a control arm.R'. The script 'Example code for comparing two experimental arms to a control arm.R' illustrates the use of these functions for settings considered in the practical example.
 
+(Exact copy of the original repository:  https://github.com/PeterMVanDeVen/Decision-Theoretic-MAMS-trials)
