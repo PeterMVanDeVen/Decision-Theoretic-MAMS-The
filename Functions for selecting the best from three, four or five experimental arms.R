@@ -455,12 +455,12 @@ evalnodrop <- function(y, n1, n2, prior, delta = 0, gamma){
 #          which is the total sample sizes of the trials
 
 prsinglestage <- function(Y, delta = 0, burn, Ntrials, prior, nr_dec){
+  arms <- dim(Y)[2]
   cl<-makeCluster(2) #change the 2 to your number of CPU cores
   registerDoParallel(cl)
   LL <- array(dim=c(Ntrials,1))
   print(Sys.time())
   LL <- foreach(i=1:Ntrials, .combine = rbind, .export=c('Tdata')) %dopar% {
-    arms <- dim(Y)[2]
     n <- rep(burn, arms) # batch size at start (PER ARM)
     y <- apply(Y[,,i][1:burn,],2,sum)
     Ty = Tdata(y, n, prior, delta)
