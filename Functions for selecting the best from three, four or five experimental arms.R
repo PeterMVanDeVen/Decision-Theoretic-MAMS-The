@@ -370,8 +370,7 @@ evaldrop <- function(y, n1, n2, prior, delta = 0, gamma, dropctrl = TRUE){
          n2drop[active_arms] = floor(sum(n2)/(Jnew-1))
          n2drop[k]=0
          n_remain = sum(n2)-sum(n2drop) 
-         active_arms[which(min(len[active_arms])==len[active_arms])]
-          if(n_remain > 0) {len=n1+n2drop;active_after_drop=active; active_after_drop[k]=FALSE; active_arms_after_drop = (1:J)[active_after_drop];
+         if(n_remain > 0) {len=n1+n2drop;active_after_drop=active; active_after_drop[k]=FALSE; active_arms_after_drop = (1:J)[active_after_drop];
                 arms_not_dropped_with_min = active_arms_after_drop[which(min(len[active_arms_after_drop])==len[active_arms_after_drop])];
                 n_active_arms_with_minimum = length(arms_not_dropped_with_min)
                 if(n_remain == n_active_arms_with_minimum) {len[arms_not_dropped_with_min]=len[arms_not_dropped_with_min]+1; n2drop=len-n1} else 
