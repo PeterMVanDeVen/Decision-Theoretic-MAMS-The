@@ -29,7 +29,7 @@ Trial <- R6::R6Class(
 
         # Private methods
 
-        create = function(resp_rate, n_trials, n_max) {
+        create = function(resp_rate, n_trials, n_max, ) {
 
             private$data <-
                 tibble(
@@ -47,6 +47,17 @@ Trial <- R6::R6Class(
                 ungroup() %>%
                 arrange(id_trial, id_patient, id_arm) %>%
                 select(id_trial, id_arm, id_patient, y)
+
+            # TODO continue from here, find a way to calculate Tdata per each
+            # stage and trial, all in one step.
+
+            # n_per_stage_per_arm <- 20
+            #
+            # tbl_data %>%
+            #     mutate(id_stage = ceiling(id_patient / n_per_stage_per_arm)) %>%
+            #     group_by(id_trial, id_arm, id_stage) %>%
+            #     summarise(y = sum(y), n = n())
+            #
 
         }
 
