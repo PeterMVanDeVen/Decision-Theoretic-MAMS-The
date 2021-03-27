@@ -20,7 +20,7 @@ Trial <- R6::R6Class(
 
         solve = function() {
 
-            n_stage_per_arm <- 20
+            n_per_stage_per_arm <- 20
 
             private$data %>%
                 mutate(id_stage = ceiling(id_patient / n_per_stage_per_arm)) %>%
@@ -88,7 +88,7 @@ Trial <- R6::R6Class(
 
             # Create a tibble with names theta_1, theta_2, etc.
             tbl_theta <-
-                as_tibble(theta) %>%
+                as_tibble(theta, .name_repair = 'minimal') %>%
                 magrittr::set_colnames(paste0('theta_', 1:ncol(theta)))
 
             tbl_theta %>%
@@ -119,7 +119,7 @@ Trial <- R6::R6Class(
             K <- length(y)
 
             # Sample size for posterior draws per arm
-            G <- 1e4
+            G <- 1e3
 
             # Prior parameters
             a <- prior[1]
@@ -150,7 +150,22 @@ Trial <- R6::R6Class(
             # Optimal decision: argmin(E[Loss])
             opt_dec <- decisions[which.min(loss_val)]
 
-            return(opt_dec)
+            tbl_theta <-
+                theta_post %>%
+                as_tibble() %>%
+                magrittr::set_colnames(paste0('theta_', 1:ncol(theta_post)))
+
+            opt_loss <- min(loss_val)
+
+            return(
+                tibble(
+                    opt_dec, opt_loss, tbl_theta
+                ) %>%
+                    tidyr::nest(theta = starts_with('theta'))
+            )
+
+            # return(opt_dec)
+            # return(list(theta = theta_post %>% as_tibble(), loss = loss_val))
 
         }
 
