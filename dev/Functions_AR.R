@@ -98,7 +98,6 @@ prnodrop <- function(
         ns <- matrix(ncol = arms, nrow = 0)
         ys <- matrix(ncol = arms, nrow = 0)
         first <- TRUE
-        cdt <- (sum(len) + arms*n <= maxpt)
         while ((gamma == 0 | TR > gamma) & (sum(len) + arms*n <= maxpt) != 0) {
             len <- len + len2
             old_len <- len2
@@ -145,6 +144,76 @@ prnodrop <- function(
 }
 
 
+prAr <- function(
+    Y,
+    gamma,
+    burn = 0,
+    batch,
+    prior,
+    maxpt,
+    n_cores
+){
+    cl <- makeCluster(min(detectCores(), n_cores)) #change the 8 to your number of CPU cores
+    registerDoParallel(cl)
+    Ntrials <- dim(Y)[3]
+    LL <- array(dim = c(Ntrials,(2*(dim(Y)[2]) + 3)))
+    print(Sys.time())
+
+    LL <- foreach(i = 1:Ntrials, .combine = rbind, .export = c('evalFullAr', 'Ttheta')) %dopar% {
+        G <- 1000
+        n <- batch  # batch size at start (PER ARM)
+        arms <- dim(Y)[2]
+        y <- Y[,,i]
+        TR <- 0
+        dat <- rep(0, arms)
+        len <- rep(max(burn - n, 0),arms)
+        len2 = rep(n, arms);
+        ben <- NULL
+        a <- prior[1]
+        b <- prior[2]
+        ns <- matrix(ncol = arms, nrow = 0)
+        ys <- matrix(ncol = arms, nrow = 0)
+        first <- TRUE
+        while ((gamma == 0 | TR < gamma) & (sum(len) + arms*n <= maxpt) != 0) {
+            len <- len + len2
+            old_len <- len2
+            dat <- NULL
+            for (j in 1:length(len)) {
+                dat <- c(dat, sum(y[1:len[j], j]))
+            }
+            theta <- matrix(rbeta(G*arms, shape1 = a + dat, shape2 = b + len - dat), ncol = arms, byrow = T)
+            Tt <- Ttheta(theta)
+            ntotal = n*arms
+            theta_ThompsonSampling <- matrix(rbeta(ntotal*arms, shape1 = a + dat, shape2 = b + len - dat), ncol = arms, byrow = T)
+            allocationAR <- apply(theta_ThompsonSampling, 1, which.max)
+            len2 <- table(c(allocationAR,(1:arms))) - rep(1,arms)
+
+            TR <- evalFullAr(y = dat, n = len, prior)
+            ben <- c(ben, TR)
+            if (first) {
+                nstage <- as.vector(len)
+                ystage <- dat
+                first <- FALSE
+            } else {
+                nstage <- as.vector(old_len)
+                ystage <- dat - apply(ys,2,sum)
+            }
+            ns <- rbind(ns,nstage)
+            ys <- rbind(ys, ystage)
+        }
+        c(
+            as.vector(len),
+            as.vector(dat),
+            list(benefit = ben, n = ns, y = ys)
+        )
+    }
+    print(Sys.time())
+    stopCluster(cl)
+    rm(cl)
+    return(LL)
+}
+
+
 # pcalc
 #
 # Function pcalc computes the probability of each final decision being the correct decision and
@@ -164,9 +233,9 @@ prnodrop <- function(
 ## dimension of Yrec determined assuming that $y part of output (fixed for prnodrop, not for prdrop)
 
 
-pcalc <- function(LL, prior, delta = 0, nr_dec){
+pcalc <- function(LL, prior, nr_dec){
     if(!is.numeric(LL)){
-        Yrec <- matrix(as.numeric(LL[,1:(dim(LL)[2]-4)]), ncol = (dim(LL)[2]-4))
+        Yrec <- matrix(as.numeric(LL[,1:(dim(LL)[2]-3)]), ncol = (dim(LL)[2]-3))
     } else{
         Yrec <- LL
     }
@@ -176,7 +245,7 @@ pcalc <- function(LL, prior, delta = 0, nr_dec){
     n <- Yrec[,1:(K/2)]
     Pr <- array()
     for(j in 1:L){
-        Pr[j] <- Tdata(y = y[j,], n = n[j,], prior, delta)
+        Pr[j] <- Tdata(y = y[j,], n = n[j,], prior)
     }
     tbl <- table(factor(Pr, levels = 1:nr_dec))/L
     prop_allocated = apply(n,2,sum)/sum(n)
@@ -211,13 +280,30 @@ pcalc <- function(LL, prior, delta = 0, nr_dec){
 reevaluate <- function(trialres, Y, newgamma){
     Q <- dim(trialres)[2]
     L <- dim(trialres)[1]
-    arms <- (Q-4)/2
-    Yrec <- array(dim = c(L,Q-4))
+    arms <- (Q-3)/2
+    Yrec <- array(dim = c(L,Q-3))
     for(i in 1:L){
-        ben <- unlist(trialres[i,Q-3])
-        drp <- unlist(trialres[i,Q-2])
+        ben <- unlist(trialres[i,Q-2])
         nstage <- matrix(unlist(trialres[i,Q-1]), ncol=arms, byrow=FALSE)
         if(length(which(ben <= newgamma))==0) {st<-length(ben)} else {st<-min(which(ben <= newgamma))}
+        # with new gamma stopped after st stages
+        if(st>1) {npt<-apply(nstage[1:st,], 2, sum)} else {npt<-nstage[1,]}
+        dat<-c()
+        for(j in 1:arms) {
+            dat[j]=sum(Y[1:npt[j],j,i])}
+        Yrec[i,] <- c(npt, dat)
+    } #endfor
+    return(Yrec)}
+
+reevaluateAr <- function(trialres, Y, newgamma){
+    Q <- dim(trialres)[2]
+    L <- dim(trialres)[1]
+    arms <- (Q-3)/2
+    Yrec <- array(dim = c(L,Q-3))
+    for(i in 1:L){
+        ben <- unlist(trialres[i,Q-2])
+        nstage <- matrix(unlist(trialres[i,Q-1]), ncol=arms, byrow=FALSE)
+        if(length(which(ben > newgamma))==0) {st<-length(ben)} else {st<-min(which(ben > newgamma))}
         # with new gamma stopped after st stages
         if(st>1) {npt<-apply(nstage[1:st,], 2, sum)} else {npt<-nstage[1,]}
         dat<-c()
@@ -309,6 +395,40 @@ evalnodrop <- function(y, n1, n2, prior, gamma, AR = FALSE) {
     b1 <- sum(Tynew == Tt)/G
 
     return(list(ben.stop = b0, ben.cont = 1))
+
+}
+
+evalFullAr <- function(y, n, prior) {
+
+    if (length(y) != length(n)) {
+        cat("ERROR: dimension of y and n must coincide")
+        return(NULL)
+    }
+    a <- prior[1]
+    b <- prior[2]
+    G <- 10000
+    K <- length(y)
+
+    theta <-
+        matrix(
+            rbeta(
+                G*K,
+                shape1 = a + y,
+                shape2 = b + n - y
+            ),
+            ncol = K,
+            byrow = TRUE
+        )
+
+    best_arm <-
+        factor(
+            apply(theta, 1, function(x) which.max(x)),
+            levels = 1:K
+        )
+    probs_arm <- as.vector(table(best_arm) / G)
+
+    best <- max(probs_arm)
+    return(best)
 
 }
 
